@@ -13,26 +13,29 @@ def convBlock (priorNode, LAYER1= (96, (1,1), (1,1)), LAYER2=((3,3), (1,1)), LAY
   conv2d_2 = L.Conv2D(LAYER3[0], LAYER3[1], strides=LAYER3[2], padding='same', use_bias=True)(depth_conv2d_1)
   return conv2d_2
 
-def reshapeTransposeBlock (priorNode, RESHAPE= (4, 8, 512), TRANSPOSE_PERM=[0, 2, 1, 3]):
-  batch_size = tf.shape(priorNode)[0]
-  reshape = tf.reshape(priorNode, (batch_size, RESHAPE[0], RESHAPE[1], RESHAPE[2]))
-  transpose = tf.transpose(reshape, perm= TRANSPOSE_PERM)
-  return transpose
+def reshapeTransposeBlock(priorNode, RESHAPE=(8, 4, 8, 512), TRANSPOSE_PERM=[0, 2, 1, 3]):
+    print("HEY")
+    print(priorNode.shape)
+    batch_size = tf.shape(priorNode)[0]
+    reshape = tf.reshape(priorNode, RESHAPE)
+    transpose = tf.transpose(reshape, perm=TRANSPOSE_PERM)
+    print(transpose.shape)
+    return transpose
 
-def transposeReshapeBlock (priorNode, RESHAPE= (4, 8, 512), TRANSPOSE_PERM=[0, 2, 1, 3]):
-  transpose = tf.transpose(priorNode, perm= TRANSPOSE_PERM)
+
+def transposeReshapeBlock (priorNode, RESHAPE=(8, 4, 8, 512), TRANSPOSE_PERM=[0, 2, 1, 3]):
+  transpose = tf.transpose(priorNode, perm=TRANSPOSE_PERM)
   batch_size = tf.shape(transpose)[0]
-  reshape = tf.reshape(transpose, (batch_size, RESHAPE[0], RESHAPE[1], RESHAPE[2]))
+  reshape = tf.reshape(transpose, RESHAPE)
   return reshape
 
 def largeBlock(priorNode, MUL=128):
   # Block 2-1
-  B = L.Conv2D(MUL, (1, 1), strides=(1, 1), padding='same', use_bias=True)(priorNode)
-  block_2_1 = L.Multiply()([priorNode, B])
-  block_2_1 = L.Add()([block_2_1, B])
+  block_2_1 = tf.multiply(priorNode, priorNode)  # Multiply with priorNode itself
+  block_2_1 = tf.add(block_2_1, block_2_1)  # Add the result with itself
 
   # Block 2-2
-  block_2_2 = L.Conv2D(MUL, (1, 1), strides=(1, 1), padding='same', use_bias=True)(block_2_1)
+  block_2_2 = L.Conv2D(1, (1, 1), strides=(1, 1), padding='same', use_bias=True)(block_2_1)
   
   batch_size = tf.shape(block_2_2)[0]
   if MUL == 128:
@@ -78,30 +81,33 @@ def build_model(input_shape, classes = 6):
   x1 = convBlock(x1, LAYER1= (384, (1,1), (1,1)), LAYER2=((3,3), (2,2)), LAYER3 = (128, (1,1), (1,1)))
 
   x1_1 = convBlock(x1, LAYER1= (768, (1,1), (1,1)), LAYER2=((3,3), (1,1)), LAYER3 = (128, (1,1), (1,1)))
-  output1 = L.Add(name= "output1")([x1, x1_1])
+  output1 = L.Add(name= "output1")([x1_1, x1])
+  batch_size = tf.shape(output1)[0]
+  # output1 = tf.reshape(output1, (batch_size, 64, 64, 128))
 
   # Block 2
   x2 = convBlock(output1, LAYER1= (768, (1,1), (1,1)), LAYER2=((3,3), (2,2)), LAYER3 = (256, (1,1), (1,1)))
   x2 = L.Conv2D(128, (3,3), strides= (1,1) , padding='same', use_bias=True, activation='relu')(x2)
   x2 = L.Conv2D(128, (1,1), strides= (1,1) , padding='same', use_bias=True, activation='relu')(x2)
-  x2 = reshapeTransposeBlock(x2, RESHAPE= (4, 8, 512), TRANSPOSE_PERM=[0, 2, 1, 3])
-  output2 = reshapeTransposeBlock(x2, RESHAPE= (64, 16, 128), TRANSPOSE_PERM=[0, 2, 1, 3])
+  x2 = reshapeTransposeBlock(x2, RESHAPE= (8, 4, 8, 512), TRANSPOSE_PERM=[0, 2, 1, 3])
+  output2 = reshapeTransposeBlock(x2, RESHAPE= (1, 64, 16, 128), TRANSPOSE_PERM=[0, 2, 1, 3])
 
   # Block 3
   x3 = largeBlock(output2)
   x3 = largeBlock(x3)
 
-  x3 = transposeReshapeBlock(x3, RESHAPE= (8, 4, 512), TRANSPOSE_PERM=[0, 2, 1, 3])
-  x3 = transposeReshapeBlock(x3, RESHAPE= (32, 32, 128), TRANSPOSE_PERM=[0, 2, 1, 3])
+  x3 = transposeReshapeBlock(x3, RESHAPE= (8, 8, 4, 512), TRANSPOSE_PERM=[0, 2, 1, 3])
+  x3 = transposeReshapeBlock(x3, RESHAPE= (1, 32, 32, 128), TRANSPOSE_PERM=[0, 2, 1, 3])
   output3 = L.Conv2D(256, (1, 1), strides=(1, 1), padding='same', use_bias=True, name="output3")(x3)
 
   # Block 4
   x4 = convBlock(output3, LAYER1= (1536, (1,1), (1,1)), LAYER2=((3,3), (2,2)), LAYER3 = (384, (1,1), (1,1)))
   x4 = L.Conv2D(192, (3,3), strides= (1,1) , padding='same', use_bias=True, activation='relu')(x4)
   x4 = L.Conv2D(192, (1,1), strides= (1,1) , padding='same', use_bias=True, activation='relu')(x4)
+  x4.shape
 
-  x4 = reshapeTransposeBlock(x4, RESHAPE= (4, 4, 768), TRANSPOSE_PERM=[0, 2, 1, 3])
-  x4 = reshapeTransposeBlock(x4, RESHAPE= (16, 16, 192), TRANSPOSE_PERM=[0, 2, 1, 3])
+  x4 = reshapeTransposeBlock(x4, RESHAPE= (4, 4, 4, 768), TRANSPOSE_PERM=[0, 2, 1, 3])
+  x4 = reshapeTransposeBlock(x4, RESHAPE= (1, 16, 16, 192), TRANSPOSE_PERM=[0, 2, 1, 3])
   # x4.shape
 
   x4 = largeBlock(x4, MUL=192)
@@ -109,8 +115,8 @@ def build_model(input_shape, classes = 6):
   x4 = largeBlock(x4, MUL=192)
   x4 = largeBlock(x4, MUL=192)
 
-  x4 = transposeReshapeBlock(x4, RESHAPE= (4, 4, 768), TRANSPOSE_PERM=[0, 2, 1, 3])
-  x4 = transposeReshapeBlock(x4, RESHAPE= (16, 16, 192), TRANSPOSE_PERM=[0, 2, 1, 3])
+  x4 = transposeReshapeBlock(x4, RESHAPE= (4, 4, 4, 768), TRANSPOSE_PERM=[0, 2, 1, 3])
+  x4 = transposeReshapeBlock(x4, RESHAPE= (1, 16, 16, 192), TRANSPOSE_PERM=[0, 2, 1, 3])
   x4 = L.Conv2D(384, (1,1), strides= (1,1) , padding='same', use_bias=True)(x4)
   x4 = L.DepthwiseConv2D((1,1), strides=(1,1), padding='same', use_bias=True)(x4)
   output4 = L.Conv2D(64, (1,1), strides= (1,1) , padding='same', use_bias=True, name= "output4")(x4)
@@ -195,4 +201,3 @@ if __name__ == "__main__":
   model.summary()
   # Save model architecture plot
   # plot_model(model, to_file='model_plot.png', show_shapes=True, show_layer_names=True)
-

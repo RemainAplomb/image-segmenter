@@ -15,7 +15,8 @@ def convBlock (priorNode, LAYER1= (96, (1,1), (1,1)), LAYER2=((3,3), (1,1)), LAY
 
 def reshapeTransposeBlock(priorNode, RESHAPE=(8, 4, 8, 512), TRANSPOSE_PERM=[0, 2, 1, 3]):
     print("HEY")
-    print(priorNode.shape)
+    # print(priorNode.shape)
+    print(RESHAPE)
     batch_size = tf.shape(priorNode)[0]
     reshape = tf.reshape(priorNode, RESHAPE)
     transpose = tf.transpose(reshape, perm=TRANSPOSE_PERM)
@@ -36,7 +37,7 @@ def largeBlock(priorNode, MUL=128):
 
   # Block 2-2
   block_2_2 = L.Conv2D(1, (1, 1), strides=(1, 1), padding='same', use_bias=True)(block_2_1)
-  
+
   batch_size = tf.shape(block_2_2)[0]
   if MUL == 128:
     block_2_2 = tf.reshape(block_2_2, (batch_size, 16, 1, 64))
@@ -71,7 +72,7 @@ def largeBlock(priorNode, MUL=128):
 
 
 # BUILD MODEL
-def build_model(input_shape, classes = 6):
+def build_model(input_shape, classes = 6, bs = 4):
   # Input layer
   inputs = L.Input(input_shape)
   x = L.Conv2D(16, (3, 3), strides=(2, 2), padding='same', use_bias=True, activation='relu')(inputs)
@@ -82,13 +83,14 @@ def build_model(input_shape, classes = 6):
 
   x1_1 = convBlock(x1, LAYER1= (768, (1,1), (1,1)), LAYER2=((3,3), (1,1)), LAYER3 = (128, (1,1), (1,1)))
   output1 = L.Add(name= "output1")([x1_1, x1])
-  batch_size = tf.shape(output1)[0]
-  # output1 = tf.reshape(output1, (batch_size, 64, 64, 128))
+  # batch_size = tf.shape(output1)[0]
+  # output1 = tf.reshape(output1, (bs, 64, 64, 128))
 
   # Block 2
   x2 = convBlock(output1, LAYER1= (768, (1,1), (1,1)), LAYER2=((3,3), (2,2)), LAYER3 = (256, (1,1), (1,1)))
   x2 = L.Conv2D(128, (3,3), strides= (1,1) , padding='same', use_bias=True, activation='relu')(x2)
   x2 = L.Conv2D(128, (1,1), strides= (1,1) , padding='same', use_bias=True, activation='relu')(x2)
+  bs = tf.shape(x2)
   x2 = reshapeTransposeBlock(x2, RESHAPE= (8, 4, 8, 512), TRANSPOSE_PERM=[0, 2, 1, 3])
   output2 = reshapeTransposeBlock(x2, RESHAPE= (1, 64, 16, 128), TRANSPOSE_PERM=[0, 2, 1, 3])
 
@@ -135,7 +137,7 @@ def build_model(input_shape, classes = 6):
   x6_output5 = tf.image.resize(output5, size=(64, 64), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
   output6 = L.Add(name= "output6")([x6, x6_output5])
 
-  # Block 7 
+  # Block 7
   x7 = L.DepthwiseConv2D((1,1), strides=(1,1), padding='same', use_bias=True)(x)
   x7 = L.Conv2D(64, (1,1), strides= (1,1) , padding='same', use_bias=True)(x7)
 
@@ -187,7 +189,9 @@ def build_model(input_shape, classes = 6):
 
   x11 = L.Conv2DTranspose(32, (2,2), strides=(2,2), padding='same', use_bias=True)(x11)
 
-  output11 = L.Conv2D(NUM_CLASSES, (1,1), strides= (1,1) , padding='same', use_bias=True, activation='relu')(x11)
+  #output11 = L.Conv2D(NUM_CLASSES, (1,1), strides= (1,1) , padding='same', use_bias=True, activation='sigmoid')(x11)
+  # outputs = Conv2D(num_classes, 1, padding="same", activation="softmax")(d4)
+  output11 = L.Conv2D(NUM_CLASSES, 1, padding='same', activation='softmax')(x11)
 
 
   # Build model
